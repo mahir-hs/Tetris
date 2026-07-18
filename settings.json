@@ -1,0 +1,21 @@
+{
+  "startingLevel": 1,
+  "ghostEnabled": true,
+  "holdEnabled": true,
+  "rotate180Enabled": true,
+  "theme": "classic",
+  "fpsLimit": 60,
+  "keyBindings": {
+    "hardDrop": "space",
+    "hold": "c",
+    "moveLeft": "left",
+    "moveRight": "right",
+    "pause": "p",
+    "quit": "q",
+    "restart": "r",
+    "rotate180": "a",
+    "rotateCCW": "z",
+    "rotateCW": "up",
+    "softDrop": "down"
+  }
+}

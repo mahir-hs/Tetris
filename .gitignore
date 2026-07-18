@@ -1,0 +1,14 @@
+# Build artifacts
+/tetris
+/tetris.exe
+
+# Runtime data
+/tetris.db
+/tetris.db-journal
+/logs/game.log
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
