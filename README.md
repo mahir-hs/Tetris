@@ -73,6 +73,49 @@ go build -o tetris ./cmd/tetris
 On first launch you will be prompted for a username (a profile is created
 automatically if it does not exist). Select **Play** to begin.
 
+## Play in the browser (WebAssembly)
+
+The same engine runs in any modern browser — no terminal required. The game
+logic (`internal/domain`) compiles to WebAssembly and is rendered to a
+`<canvas>`; high scores are kept in `localStorage`.
+
+The game is deployed automatically to **GitHub Pages** from the
+`.github/workflows/pages.yml` workflow on every push to `main`. After the
+first run, enable it in **Settings → Pages → Build and deployment → Source:
+GitHub Actions**; the published URL (e.g. `https://<user>.github.io/<repo>/`)
+is playable by anyone.
+
+### Run locally
+
+```bash
+# 1. Build the WASM binary + copy the JS glue (needs Go installed)
+cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" web/
+GOOS=js GOARCH=wasm go build -o web/main.wasm ./cmd/wasm
+
+# 2. Serve the folder over HTTP (wasm will not load from file://)
+cd web && python3 -m http.server 8080
+#    then open http://localhost:8080
+```
+
+### Browser controls
+
+| Action      | Keyboard            | Touch                 |
+| ----------- | ------------------- | --------------------- |
+| Move Left   | ←                   | ◀ button (hold)       |
+| Move Right  | →                   | ▶ button (hold)       |
+| Soft Drop   | ↓ (hold)            | ▼ button (hold)       |
+| Hard Drop   | Space               | ⤓ button              |
+| Rotate CW   | ↑                   | ⟳ button              |
+| Rotate CCW  | Z                   | ⟲ button              |
+| Rotate 180° | A                   | —                     |
+| Hold Piece  | C                   | HOLD button           |
+| Pause       | P                   | ⏸ button              |
+| Restart     | R                   | —                     |
+
+On-screen touch buttons appear automatically on phones/tablets. Themes
+(Classic / Neon / Retro / Mono) are selectable in the page header, and the top
+10 scores persist in the browser.
+
 ## Controls
 
 | Action      | Key            |

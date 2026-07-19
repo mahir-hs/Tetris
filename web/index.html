@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Tetris</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="title">
+      <h1>TETRIS</h1>
+      <label class="theme-pick">
+        Theme
+        <select id="theme">
+          <option value="classic">Classic</option>
+          <option value="neon">Neon</option>
+          <option value="retro">Retro</option>
+          <option value="mono">Mono</option>
+        </select>
+      </label>
+    </header>
+
+    <div class="game">
+      <section class="stage">
+        <canvas id="field" width="300" height="600"></canvas>
+
+        <div class="touch" id="touch" aria-hidden="true">
+          <div class="touch-row">
+            <button class="btn hold-btn" data-action="hold" data-repeat="false">HOLD</button>
+            <button class="btn" data-action="rotateCCW" data-repeat="false">⟲</button>
+            <button class="btn" data-action="rotateCW" data-repeat="false">⟳</button>
+            <button class="btn" data-action="hardDrop" data-repeat="false">⤓</button>
+          </div>
+          <div class="touch-row">
+            <button class="btn" data-action="moveLeft" data-repeat="true">◀</button>
+            <button class="btn" data-action="softDrop" data-repeat="hold">▼</button>
+            <button class="btn" data-action="moveRight" data-repeat="true">▶</button>
+            <button class="btn" data-action="pause" data-repeat="false">⏸</button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <div class="box">
+          <h2>HOLD</h2>
+          <canvas id="hold" width="120" height="80"></canvas>
+        </div>
+        <div class="box">
+          <h2>NEXT</h2>
+          <canvas id="next" width="120" height="400"></canvas>
+        </div>
+        <div class="box stats">
+          <div class="stat"><span>SCORE</span><b id="score">0</b></div>
+          <div class="stat"><span>LEVEL</span><b id="level">1</b></div>
+          <div class="stat"><span>LINES</span><b id="lines">0</b></div>
+          <div class="stat"><span>COMBO</span><b id="combo">—</b></div>
+          <div class="stat"><span>B2B</span><b id="b2b">—</b></div>
+          <div class="stat"><span>TIME</span><b id="time">00:00</b></div>
+        </div>
+        <p class="hint">
+          ← → move · ↑ rotate · Z rotate CCW · A 180° ·<br />
+          ↓ soft drop · Space hard drop · C hold · P pause · R restart
+        </p>
+      </aside>
+    </div>
+  </main>
+
+  <div class="overlay" id="overlay">
+    <div class="overlay-card" id="overlay-card"></div>
+  </div>
+
+  <script src="wasm_exec.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
