@@ -415,6 +415,8 @@ function showCredits() {
     '<p class="muted">Engine: Go <code>internal/domain</code> compiled to WebAssembly.</p>' +
     '<p class="muted">Rendering: HTML5 Canvas. A port of the CLI Tetris.</p>' +
     '<p class="muted">Guideline rules: 7-bag, SRS, T-spin, combos, B2B, perfect clear.</p>' +
+    '<p class="muted">Tetris® is a registered trademark of Tetris Holding, LLC.</p>' +
+    '<p class="muted">Fan-made clone — not affiliated with or endorsed by The Tetris Company.</p>' +
     '<button class="primary" id="back-btn">Back</button>';
   overlay.classList.add("show");
   document.getElementById("back-btn").onclick = showMenu;

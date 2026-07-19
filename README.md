@@ -121,6 +121,10 @@ The browser build mirrors the CLI's menus: from the start screen choose
 **Settings** (starting level, ghost/hold/180° toggles — persisted), or
 **Credits**. Settings are passed into the engine when a game starts.
 
+> **Trademark:** Tetris® is a registered trademark of Tetris Holding, LLC.
+> This project is a fan-made clone and is not affiliated with or endorsed by
+> The Tetris Company.
+
 ## Controls
 
 | Action      | Key            |
