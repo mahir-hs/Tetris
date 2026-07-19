@@ -241,3 +241,93 @@ html, body {
   .panel .hint { flex-basis: 100%; }
   .title h1 { font-size: 22px; }
 }
+
+/* Menu */
+.menu {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0;
+}
+.menu li {
+  padding: 11px 16px;
+  border-radius: 8px;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  margin: 4px 0;
+  border: 1px solid transparent;
+}
+.menu li.sel {
+  background: var(--accent);
+  color: #04222a;
+}
+
+/* Settings rows */
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  margin: 6px 0;
+  cursor: pointer;
+  font-size: 15px;
+}
+.setting-row.sel {
+  border-color: var(--accent);
+  background: var(--panel-2);
+}
+.setting-row .controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.setting-row .controls b {
+  min-width: 42px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.setting-row button {
+  width: 30px;
+  height: 30px;
+  font-size: 18px;
+  font-weight: 700;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+}
+.setting-row button:active { background: var(--accent); color: #04222a; }
+
+/* Statistics grid */
+.stat2 {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.stat2 b { font-variant-numeric: tabular-nums; }
+
+/* Secondary button */
+.overlay-card button.secondary {
+  margin: 8px 0 0 8px;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 22px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.overlay-card button.secondary:active { border-color: var(--accent); }
+
+code {
+  background: var(--panel-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}

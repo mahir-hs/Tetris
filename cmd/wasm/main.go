@@ -214,6 +214,16 @@ func snapshot(this js.Value, args []js.Value) interface{} {
 	}
 	snap["clearRows"] = clearRows
 
+	st := game.Stats()
+	snap["stats"] = map[string]interface{}{
+		"piecesPlaced":  st.PiecesPlaced,
+		"tetrises":      st.Tetrises,
+		"tSpins":        st.TSpins,
+		"miniTSpins":    st.MiniTSpins,
+		"perfectClears": st.PerfectClears,
+		"longestCombo":  st.LongestCombo,
+	}
+
 	return snap
 }
 

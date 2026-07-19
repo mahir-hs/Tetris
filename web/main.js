@@ -4,7 +4,7 @@
  *  Tetris — browser frontend (WASM engine + Canvas renderer)
  *  The game logic lives in main.wasm (internal/domain). This file
  *  drives the simulation, renders to <canvas>, handles input, and
- *  persists high scores to localStorage.
+ *  persists settings + high scores + statistics to localStorage.
  * ------------------------------------------------------------------ */
 
 /* ---- Theme color tables (mirrors internal/renderer/theme.go) ---- */
@@ -48,17 +48,75 @@ const overlay = document.getElementById("overlay");
 const overlayCard = document.getElementById("overlay-card");
 const themeSel = document.getElementById("theme");
 
-let currentTheme = themeSel.value || "classic";
+/* ---- Persisted settings ---- */
+const SETTINGS_KEY = "tetris.settings.v1";
+const DEFAULT_SETTINGS = { startingLevel:1, ghostEnabled:true, holdEnabled:true, rotate180Enabled:true, theme:"classic" };
+function loadSettings() {
+  try { return Object.assign({}, DEFAULT_SETTINGS, JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}); }
+  catch { return Object.assign({}, DEFAULT_SETTINGS); }
+}
+function saveSettings() { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }
+let settings = loadSettings();
+let currentTheme = settings.theme || "classic";
+
+/* ---- Persisted lifetime statistics ---- */
+const STATS_KEY = "tetris.stats.v1";
+function loadStats() { try { return JSON.parse(localStorage.getItem(STATS_KEY)) || {}; } catch { return {}; } }
+function saveStats(s) { localStorage.setItem(STATS_KEY, JSON.stringify(s)); }
+function recordStats(snap) {
+  const s = loadStats();
+  s.gamesPlayed = (s.gamesPlayed || 0) + 1;
+  s.highScore = Math.max(s.highScore || 0, snap.score);
+  s.highLevel = Math.max(s.highLevel || 0, snap.level);
+  s.totalLines = (s.totalLines || 0) + snap.lines;
+  s.totalScore = (s.totalScore || 0) + snap.score;
+  s.totalPlayTimeMs = (s.totalPlayTimeMs || 0) + (snap.elapsedMs || 0);
+  const st = snap.stats || {};
+  s.longestCombo = Math.max(s.longestCombo || 0, st.longestCombo || 0);
+  s.totalTetrises = (s.totalTetrises || 0) + (st.tetrises || 0);
+  s.totalTSpins = (s.totalTSpins || 0) + (st.tSpins || 0);
+  s.totalMiniTSpins = (s.totalMiniTSpins || 0) + (st.miniTSpins || 0);
+  s.totalPerfectClears = (s.totalPerfectClears || 0) + (st.perfectClears || 0);
+  s.totalPieces = (s.totalPieces || 0) + (st.piecesPlaced || 0);
+  saveStats(s);
+}
+
+/* ---- High scores ---- */
+const HS_KEY = "tetris.highscores.v1";
+function loadScores() { try { return JSON.parse(localStorage.getItem(HS_KEY)) || []; } catch { return []; } }
+function saveScore(name, score, level, lines) {
+  const scores = loadScores();
+  scores.push({ name, score, level, lines, date: new Date().toISOString().slice(0, 10) });
+  scores.sort((a, b) => b.score - a.score);
+  localStorage.setItem(HS_KEY, JSON.stringify(scores.slice(0, 10)));
+}
 
 /* ---- Runtime state ---- */
 let started = false;
-let screen = "start";            // start | playing | paused | gameover
+let screen = "menu";            // menu | highscores | statistics | settings | credits | playing | paused | gameover
 let gameOverHandled = false;
 let lastTime = 0;
+let lastSnap = null;
 
-let dasDir = null;
-let dasTimer = 0;
-let dasCharged = false;
+let dasDir = null, dasTimer = 0, dasCharged = false;
+
+/* ---- Menu model ---- */
+const MENU_ITEMS = [
+  { id:"play", label:"Play" },
+  { id:"highscores", label:"High Scores" },
+  { id:"statistics", label:"Statistics" },
+  { id:"settings", label:"Settings" },
+  { id:"credits", label:"Credits" },
+];
+let menuIndex = 0;
+
+const SETTING_ROWS = [
+  { key:"startingLevel", label:"Starting Level", type:"num", min:1, max:20 },
+  { key:"ghostEnabled", label:"Ghost Piece", type:"bool" },
+  { key:"holdEnabled", label:"Hold Piece", type:"bool" },
+  { key:"rotate180Enabled", label:"180° Rotation", type:"bool" },
+];
+let settingsIndex = 0;
 
 /* ------------------------------------------------------------------ *
  *  Boot
@@ -78,7 +136,8 @@ async function loadWasm() {
 }
 
 function init() {
-  showStart();
+  themeSel.value = currentTheme;
+  showMenu();
   lastTime = performance.now();
   requestAnimationFrame(frame);
 }
@@ -95,10 +154,17 @@ function frame(now) {
     updateInput(dt);
     const snap = Tetris.snapshot();
     if (snap) {
-      render(snap);
-      syncScreen(snap);
-      if (snap.state === "gameover" && !gameOverHandled) handleGameOver(snap);
+      lastSnap = snap;
+      if (screen === "playing" || screen === "paused") {
+        render(snap);
+        syncScreen(snap);
+        if (snap.state === "gameover" && !gameOverHandled) handleGameOver(snap);
+      } else {
+        render(snap); // frozen backdrop behind a menu screen
+      }
     }
+  } else if (lastSnap) {
+    render(lastSnap);
   } else {
     renderBlank();
   }
@@ -138,7 +204,6 @@ function drawCell(ctx, x, y, size, color) {
 
 function render(snap) {
   const theme = THEMES[currentTheme];
-
   fctx.fillStyle = theme.bg;
   fctx.fillRect(0, 0, field.width, field.height);
 
@@ -232,31 +297,132 @@ function updateStats(snap) {
 }
 
 /* ------------------------------------------------------------------ *
- *  Overlays + game lifecycle
+ *  Screens
  * ------------------------------------------------------------------ */
 function startGame() {
   if (typeof Tetris === "undefined") return;
-  Tetris.new({});
+  Tetris.new({
+    startingLevel: settings.startingLevel,
+    ghost: settings.ghostEnabled,
+    hold: settings.holdEnabled,
+    rotate180: settings.rotate180Enabled,
+  });
   started = true;
   screen = "playing";
   gameOverHandled = false;
   hideOverlay();
 }
 
-function showStart() {
+function showMenu() {
+  screen = "menu";
   overlayCard.innerHTML =
-    '<h2>TETRIS</h2>' +
-    '<p>Stack the tetrominoes, clear lines, and don’t top out.</p>' +
-    '<p class="muted">Press Enter or tap Play to begin</p>' +
-    '<button class="primary" id="play-btn">Play</button>';
+    '<h2>TETRIS</h2><ul class="menu">' +
+    MENU_ITEMS.map((it, i) => `<li class="${i === menuIndex ? "sel" : ""}" data-id="${it.id}">${it.label}</li>`).join("") +
+    '</ul><p class="muted">↑ ↓ move · Enter select</p>';
   overlay.classList.add("show");
-  document.getElementById("play-btn").onclick = startGame;
+  overlayCard.querySelectorAll(".menu li").forEach((li) => { li.onclick = () => selectMenu(li.dataset.id); });
+}
+
+function selectMenu(id) {
+  if (id === "play") startGame();
+  else if (id === "highscores") showHighScores();
+  else if (id === "statistics") showStatistics();
+  else if (id === "settings") showSettings();
+  else if (id === "credits") showCredits();
+}
+
+function showHighScores() {
+  screen = "highscores";
+  const scores = loadScores();
+  const rows = scores.length
+    ? scores.slice(0, 10).map((s) => `<li>${escapeHtml(s.name)} — ${s.score} <span class="muted">(L${s.level})</span></li>`).join("")
+    : '<li class="muted">No scores yet</li>';
+  overlayCard.innerHTML = `<h2>HIGH SCORES</h2><ol>${rows}</ol><button class="primary" id="back-btn">Back</button>`;
+  overlay.classList.add("show");
+  document.getElementById("back-btn").onclick = showMenu;
+}
+
+function showStatistics() {
+  screen = "statistics";
+  const s = loadStats();
+  const fmtTime = (ms) => {
+    const t = Math.floor((ms || 0) / 1000);
+    return String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0");
+  };
+  const rows = [
+    ["Games Played", s.gamesPlayed || 0],
+    ["High Score", s.highScore || 0],
+    ["High Level", s.highLevel || 0],
+    ["Total Lines", s.totalLines || 0],
+    ["Total Score", s.totalScore || 0],
+    ["Total Play Time", fmtTime(s.totalPlayTimeMs)],
+    ["Longest Combo", s.longestCombo || 0],
+    ["Tetrises", s.totalTetrises || 0],
+    ["T-Spins", s.totalTSpins || 0],
+    ["Mini T-Spins", s.totalMiniTSpins || 0],
+    ["Perfect Clears", s.totalPerfectClears || 0],
+    ["Pieces Placed", s.totalPieces || 0],
+  ];
+  overlayCard.innerHTML =
+    "<h2>STATISTICS</h2>" +
+    rows.map(([k, v]) => `<div class="stat2"><span>${k}</span><b>${v}</b></div>`).join("") +
+    '<button class="primary" id="back-btn">Back</button>';
+  overlay.classList.add("show");
+  document.getElementById("back-btn").onclick = showMenu;
+}
+
+function showSettings() {
+  screen = "settings";
+  const rows = SETTING_ROWS.map((r, i) => {
+    const val = r.type === "num" ? String(settings[r.key]) : (settings[r.key] ? "ON" : "OFF");
+    return `<div class="setting-row${i === settingsIndex ? " sel" : ""}" data-i="${i}">` +
+      `<span>${r.label}</span><span class="controls">` +
+      `<button data-act="dec" data-i="${i}">−</button><b>${val}</b><button data-act="inc" data-i="${i}">+</button>` +
+      `</span></div>`;
+  }).join("");
+  overlayCard.innerHTML =
+    "<h2>SETTINGS</h2>" + rows +
+    '<p class="muted">↑ ↓ select · ← → adjust · Esc back</p>' +
+    '<button class="primary" id="back-btn">Back</button>';
+  overlay.classList.add("show");
+  overlayCard.querySelectorAll(".setting-row").forEach((row) => {
+    row.onclick = () => { settingsIndex = +row.dataset.i; showSettings(); };
+  });
+  overlayCard.querySelectorAll("button[data-act]").forEach((b) => {
+    b.onclick = (e) => {
+      e.stopPropagation();
+      settingsIndex = +b.dataset.i;
+      adjustSetting(SETTING_ROWS[settingsIndex].key, b.dataset.act === "dec" ? -1 : 1);
+    };
+  });
+  document.getElementById("back-btn").onclick = showMenu;
+}
+
+function adjustSetting(key, delta) {
+  const row = SETTING_ROWS.find((r) => r.key === key);
+  if (!row) return;
+  if (row.type === "num") settings[key] = Math.min(row.max, Math.max(row.min, settings[key] + delta));
+  else settings[key] = !settings[key];
+  saveSettings();
+  showSettings();
+}
+
+function showCredits() {
+  screen = "credits";
+  overlayCard.innerHTML =
+    "<h2>CREDITS</h2>" +
+    "<p>Tetris — browser edition</p>" +
+    '<p class="muted">Engine: Go <code>internal/domain</code> compiled to WebAssembly.</p>' +
+    '<p class="muted">Rendering: HTML5 Canvas. A port of the CLI Tetris.</p>' +
+    '<p class="muted">Guideline rules: 7-bag, SRS, T-spin, combos, B2B, perfect clear.</p>' +
+    '<button class="primary" id="back-btn">Back</button>';
+  overlay.classList.add("show");
+  document.getElementById("back-btn").onclick = showMenu;
 }
 
 function showPause() {
   overlayCard.innerHTML =
-    '<h2>PAUSED</h2>' +
-    '<p>Press P or tap ⏸ to resume</p>' +
+    "<h2>PAUSED</h2><p>Press P or tap ⏸ to resume</p>" +
     '<button class="primary" id="resume-btn">Resume</button>';
   overlay.classList.add("show");
   document.getElementById("resume-btn").onclick = () => { if (typeof Tetris !== "undefined") Tetris.act("pause"); };
@@ -264,14 +430,15 @@ function showPause() {
 
 function handleGameOver(snap) {
   gameOverHandled = true;
+  recordStats(snap);
   const scores = loadScores();
   const qualifies = snap.score > 0 && (scores.length < 10 || snap.score > scores[scores.length - 1].score);
 
   if (qualifies) {
     overlayCard.innerHTML =
-      '<h2>GAME OVER</h2>' +
-      '<div class="big">' + snap.score + '</div>' +
-      '<p>Level ' + snap.level + ' · ' + snap.lines + ' lines</p>' +
+      "<h2>GAME OVER</h2>" +
+      `<div class="big">${snap.score}</div>` +
+      `<p>Level ${snap.level} · ${snap.lines} lines</p>` +
       '<p class="muted">New high score! Enter your name:</p>' +
       '<input id="hs-name" maxlength="12" placeholder="Player" />' +
       '<button class="primary" id="save-btn">Save Score</button>';
@@ -292,23 +459,24 @@ function handleGameOver(snap) {
 function showGameOverBoard(snap) {
   const scores = loadScores();
   const rows = scores.length
-    ? scores.slice(0, 10).map((s) => '<li>' + escapeHtml(s.name) + ' — ' + s.score + ' <span class="muted">(L' + s.level + ')</span></li>').join("")
+    ? scores.slice(0, 10).map((s) => `<li>${escapeHtml(s.name)} — ${s.score} <span class="muted">(L${s.level})</span></li>`).join("")
     : '<li class="muted">No scores yet</li>';
   overlayCard.innerHTML =
-    '<h2>GAME OVER</h2>' +
-    '<div class="big">' + snap.score + '</div>' +
-    '<p>Level ' + snap.level + ' · ' + snap.lines + ' lines</p>' +
-    '<p class="muted">High Scores</p>' +
-    '<ol>' + rows + '</ol>' +
-    '<button class="primary" id="again-btn">Play Again</button>';
+    "<h2>GAME OVER</h2>" +
+    `<div class="big">${snap.score}</div>` +
+    `<p>Level ${snap.level} · ${snap.lines} lines</p>` +
+    '<p class="muted">High Scores</p><ol>' + rows + "</ol>" +
+    '<button class="primary" id="again-btn">Play Again</button>' +
+    '<button class="secondary" id="menu-btn">Menu</button>';
   overlay.classList.add("show");
   document.getElementById("again-btn").onclick = startGame;
+  document.getElementById("menu-btn").onclick = showMenu;
 }
 
 function showLoadError(err) {
   overlayCard.innerHTML =
-    '<h2>Failed to load</h2>' +
-    '<p class="muted">' + escapeHtml(String(err)) + '</p>' +
+    "<h2>Failed to load</h2>" +
+    `<p class="muted">${escapeHtml(String(err))}</p>` +
     '<p class="muted">Serve this folder over HTTP (not file://) and make sure main.wasm is present.</p>';
   overlay.classList.add("show");
 }
@@ -316,30 +484,10 @@ function showLoadError(err) {
 function hideOverlay() { overlay.classList.remove("show"); }
 
 /* ------------------------------------------------------------------ *
- *  High scores (localStorage)
- * ------------------------------------------------------------------ */
-const HS_KEY = "tetris.highscores.v1";
-
-function loadScores() {
-  try { return JSON.parse(localStorage.getItem(HS_KEY)) || []; }
-  catch { return []; }
-}
-
-function saveScore(name, score, level, lines) {
-  const scores = loadScores();
-  scores.push({ name, score, level, lines, date: new Date().toISOString().slice(0, 10) });
-  scores.sort((a, b) => b.score - a.score);
-  localStorage.setItem(HS_KEY, JSON.stringify(scores.slice(0, 10)));
-}
-
-/* ------------------------------------------------------------------ *
  *  Input: keyboard
  * ------------------------------------------------------------------ */
 const keyMap = {
-  ArrowLeft: "moveLeft",
-  ArrowRight: "moveRight",
-  ArrowDown: "softDrop",
-  ArrowUp: "rotateCW",
+  ArrowLeft: "moveLeft", ArrowRight: "moveRight", ArrowDown: "softDrop", ArrowUp: "rotateCW",
   " ": "hardDrop",
   z: "rotateCCW", Z: "rotateCCW",
   a: "rotate180", A: "rotate180",
@@ -351,44 +499,60 @@ const keyMap = {
 
 function onKeyDown(e) {
   if (e.target && e.target.tagName === "INPUT") return; // typing a name
-  const action = keyMap[e.key];
-  if (!action) return;
-  if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "].includes(e.key)) e.preventDefault();
+  const k = e.key;
+  if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "].includes(k)) e.preventDefault();
 
-  if (screen === "start") {
-    if (action === "confirm" || action === "hardDrop") startGame();
+  if (screen === "menu") {
+    if (k === "ArrowUp" || k === "k") menuIndex = (menuIndex - 1 + MENU_ITEMS.length) % MENU_ITEMS.length;
+    else if (k === "ArrowDown" || k === "j") menuIndex = (menuIndex + 1) % MENU_ITEMS.length;
+    else if (k === "Enter") selectMenu(MENU_ITEMS[menuIndex].id);
+    else return;
+    if (k === "ArrowUp" || k === "ArrowDown" || k === "k" || k === "j") showMenu();
     return;
   }
+
+  if (screen === "settings") {
+    if (k === "ArrowUp" || k === "k") settingsIndex = Math.max(0, settingsIndex - 1);
+    else if (k === "ArrowDown" || k === "j") settingsIndex = Math.min(SETTING_ROWS.length - 1, settingsIndex + 1);
+    else if (k === "ArrowLeft") adjustSetting(SETTING_ROWS[settingsIndex].key, -1);
+    else if (k === "ArrowRight") adjustSetting(SETTING_ROWS[settingsIndex].key, 1);
+    else if (k === "Enter") adjustSetting(SETTING_ROWS[settingsIndex].key, 0);
+    else if (k === "Escape") showMenu();
+    else return;
+    if (k !== "Escape") showSettings();
+    return;
+  }
+
+  if (screen === "highscores" || screen === "statistics" || screen === "credits") {
+    if (k === "Escape" || k === "Enter" || k === "Backspace") showMenu();
+    return;
+  }
+
   if (screen === "gameover") {
-    if (action === "confirm" || action === "restart") startGame();
-    return;
-  }
-  if (screen === "paused") {
-    if (action === "pause" && !e.repeat) Tetris.act("pause");
-    else if (action === "restart" && !e.repeat) startGame();
+    if (k === "Enter" || k === " " || k === "r" || k === "R") startGame();
+    else if (k === "Escape" || k === "m" || k === "M") showMenu();
     return;
   }
 
+  if (screen === "paused") {
+    if ((k === "p" || k === "P") && !e.repeat) Tetris.act("pause");
+    else if ((k === "r" || k === "R") && !e.repeat) startGame();
+    return;
+  }
+
+  // screen === "playing" — gameplay
+  const action = keyMap[k];
+  if (!action) return;
   switch (action) {
     case "confirm": return;
-    case "softDrop":
-      if (!e.repeat) Tetris.setSoftDrop(true);
-      return;
+    case "softDrop": if (!e.repeat) Tetris.setSoftDrop(true); return;
     case "moveLeft":
     case "moveRight":
-      if (!e.repeat) {
-        Tetris.act(action);
-        dasDir = action; dasTimer = 0; dasCharged = false;
-      }
+      if (!e.repeat) { Tetris.act(action); dasDir = action; dasTimer = 0; dasCharged = false; }
       return;
-    case "pause":
-      if (!e.repeat) Tetris.act("pause");
-      return;
-    case "restart":
-      if (!e.repeat) startGame();
-      return;
-    default:
-      if (!e.repeat) Tetris.act(action);
+    case "pause": if (!e.repeat) Tetris.act("pause"); return;
+    case "restart": if (!e.repeat) startGame(); return;
+    default: if (!e.repeat) Tetris.act(action);
   }
 }
 
@@ -409,10 +573,11 @@ function bindTouch() {
 
     const start = (e) => {
       e.preventDefault();
-      if (screen === "start" || screen === "gameover") {
+      if (screen === "menu" || screen === "gameover") {
         if (action === "hardDrop" || action === "pause") startGame();
         return;
       }
+      if (screen !== "playing") return;
       if (action === "softDrop") { Tetris.setSoftDrop(true); return; }
       Tetris.act(action);
       if (repeat === "true" || repeat === "hold") {
@@ -438,16 +603,11 @@ function bindTouch() {
 /* ------------------------------------------------------------------ *
  *  Helpers
  * ------------------------------------------------------------------ */
-function setText(id, val) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = val;
-}
+function setText(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
 
 function formatTime(ms) {
   const total = Math.floor(ms / 1000);
-  const m = String(Math.floor(total / 60)).padStart(2, "0");
-  const s = String(total % 60).padStart(2, "0");
-  return m + ":" + s;
+  return String(Math.floor(total / 60)).padStart(2, "0") + ":" + String(total % 60).padStart(2, "0");
 }
 
 function escapeHtml(s) {
@@ -460,6 +620,8 @@ function escapeHtml(s) {
  * ------------------------------------------------------------------ */
 themeSel.addEventListener("change", () => {
   currentTheme = themeSel.value;
+  settings.theme = currentTheme;
+  saveSettings();
   if (!started) renderBlank();
 });
 window.addEventListener("keydown", onKeyDown);

@@ -116,6 +116,11 @@ On-screen touch buttons appear automatically on phones/tablets. Themes
 (Classic / Neon / Retro / Mono) are selectable in the page header, and the top
 10 scores persist in the browser.
 
+The browser build mirrors the CLI's menus: from the start screen choose
+**Play**, **High Scores**, **Statistics** (lifetime, in `localStorage`),
+**Settings** (starting level, ghost/hold/180° toggles — persisted), or
+**Credits**. Settings are passed into the engine when a game starts.
+
 ## Controls
 
 | Action      | Key            |
