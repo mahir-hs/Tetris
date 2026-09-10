@@ -27,6 +27,15 @@ jobs:
         with:
           go-version: stable
 
+      - name: Test
+        run: go test ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Check browser JavaScript
+        run: node --check web/main.js
+
       - name: Copy wasm_exec.js
         run: cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" web/wasm_exec.js
 

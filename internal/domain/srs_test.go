@@ -74,6 +74,18 @@ func TestRotate180DisabledWhenUnsupported(t *testing.T) {
 	}
 }
 
+func TestRotate180UsesKickOffsets(t *testing.T) {
+	b := NewBoard()
+	tm := GetTetromino(PieceT)
+	p := ActivePiece{Type: PieceT, State: 0, X: 3, Y: 5}
+	b.cells[7][4] = 1 // blocks the un-kicked state-2 placement
+
+	r := TryRotate(b, tm, p.State, p.X, p.Y, Rotate180)
+	if !r.Changed || !r.Kicked {
+		t.Fatalf("expected a kicked 180 rotation, got %+v", r)
+	}
+}
+
 func TestRotationBlockedWhenSurrounded(t *testing.T) {
 	b := NewBoard()
 	tm := GetTetromino(PieceT)

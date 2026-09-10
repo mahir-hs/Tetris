@@ -2,73 +2,68 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#080a12" />
+  <link rel="icon" href="data:," />
   <title>Tetris</title>
   <link rel="stylesheet" href="style.css" />
 </head>
-<body>
+<body data-theme="classic">
   <main class="app">
     <header class="title">
       <h1>TETRIS</h1>
-      <label class="theme-pick">
-        Theme
-        <select id="theme">
-          <option value="classic">Classic</option>
-          <option value="neon">Neon</option>
-          <option value="retro">Retro</option>
-          <option value="mono">Mono</option>
-        </select>
-      </label>
+      <div class="session-label" id="mode-label">MARATHON</div>
     </header>
 
-    <div class="game">
-      <section class="stage">
-        <canvas id="field" width="300" height="600"></canvas>
-
-        <div class="touch" id="touch" aria-hidden="true">
-          <div class="touch-row">
-            <button class="btn hold-btn" data-action="hold" data-repeat="false">HOLD</button>
-            <button class="btn" data-action="rotateCCW" data-repeat="false">⟲</button>
-            <button class="btn" data-action="rotateCW" data-repeat="false">⟳</button>
-            <button class="btn" data-action="hardDrop" data-repeat="false">⤓</button>
-          </div>
-          <div class="touch-row">
-            <button class="btn" data-action="moveLeft" data-repeat="true">◀</button>
-            <button class="btn" data-action="softDrop" data-repeat="hold">▼</button>
-            <button class="btn" data-action="moveRight" data-repeat="true">▶</button>
-            <button class="btn" data-action="pause" data-repeat="false">⏸</button>
-          </div>
-        </div>
+    <section class="game" id="game-area" aria-label="Tetris game">
+      <section class="box preview hold-box" aria-label="Held piece">
+        <h2>HOLD</h2>
+        <canvas id="hold" width="120" height="80" role="img" aria-label="No held piece"></canvas>
       </section>
 
-      <aside class="panel">
-        <div class="box">
-          <h2>HOLD</h2>
-          <canvas id="hold" width="120" height="80"></canvas>
+      <section class="stage">
+        <div class="field-shell">
+          <canvas id="field" width="300" height="600" tabindex="-1" role="img" aria-label="Tetris playfield. Use touch gestures or keyboard controls."></canvas>
+          <div class="callout" id="callout" aria-hidden="true">
+            <strong id="callout-title"></strong>
+            <span id="callout-detail"></span>
+          </div>
         </div>
-        <div class="box">
-          <h2>NEXT</h2>
-          <canvas id="next" width="120" height="400"></canvas>
-        </div>
-        <div class="box stats">
-          <div class="stat"><span>SCORE</span><b id="score">0</b></div>
-          <div class="stat"><span>LEVEL</span><b id="level">1</b></div>
-          <div class="stat"><span>LINES</span><b id="lines">0</b></div>
-          <div class="stat"><span>COMBO</span><b id="combo">—</b></div>
-          <div class="stat"><span>B2B</span><b id="b2b">—</b></div>
-          <div class="stat"><span>TIME</span><b id="time">00:00</b></div>
-        </div>
-        <p class="hint">
-          ← → move · ↑ rotate · Z rotate CCW · A 180° ·<br />
-          ↓ soft drop · Space hard drop · C hold · P pause · R restart
-        </p>
-      </aside>
-    </div>
+        <p class="gesture-hint" id="gesture-hint">Drag to move · Tap sides to rotate · Swipe up to hold · Flick down to drop</p>
+      </section>
+
+      <section class="box preview next-box" aria-label="Next pieces">
+        <h2>NEXT</h2>
+        <canvas id="next" width="120" height="400" role="img" aria-label="Upcoming pieces"></canvas>
+      </section>
+
+      <section class="box stats" aria-label="Current game statistics">
+        <div class="stat"><span>SCORE</span><b id="score">0</b></div>
+        <div class="stat"><span>LEVEL</span><b id="level">1</b></div>
+        <div class="stat"><span>LINES</span><b id="lines">0</b></div>
+        <div class="stat optional-stat"><span>COMBO</span><b id="combo">-</b></div>
+        <div class="stat optional-stat"><span>B2B</span><b id="b2b">-</b></div>
+        <div class="stat"><span>TIME</span><b id="time">00:00</b></div>
+      </section>
+
+      <button class="pause-control" id="pause-control" type="button" aria-label="Pause game">
+        <span aria-hidden="true"></span><span aria-hidden="true"></span>
+      </button>
+
+      <p class="desktop-hint">
+        Arrow keys move · Z/Up rotate · A rotates 180 · Space drops · C holds · P pauses
+      </p>
+    </section>
   </main>
 
-  <div class="overlay" id="overlay">
-    <div class="overlay-card" id="overlay-card"></div>
+  <div class="overlay show" id="overlay" role="dialog" aria-modal="true" aria-labelledby="overlay-title">
+    <div class="overlay-card" id="overlay-card">
+      <h2 id="overlay-title">LOADING</h2>
+      <p class="muted">Starting the engine...</p>
+    </div>
   </div>
+
+  <div class="sr-only" id="live-status" aria-live="assertive" aria-atomic="true"></div>
 
   <script src="wasm_exec.js"></script>
   <script src="main.js"></script>

@@ -74,6 +74,11 @@ func kicksFor(t PieceType, from, to int) []kick {
 	switch t {
 	case PieceO:
 		return []kick{{0, 0}}
+	}
+	if (to-from+4)%4 == 2 {
+		return flipKicks
+	}
+	switch t {
 	case PieceI:
 		if k := iTable[from][to]; k != nil {
 			return k

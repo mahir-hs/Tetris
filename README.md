@@ -1,10 +1,9 @@
-# CLI Tetris
+# Tetris
 
-A production-quality, fully-featured terminal Tetris game implemented in **Go**,
-following the modern **Tetris Guideline** as closely as practical. It features
-smooth Bubble Tea rendering, the official SRS rotation system with wall kicks,
-the 7-bag randomizer, T-spin detection, combos, back-to-back chains, perfect
-clears, persistent player profiles, a leaderboard, and lifetime statistics.
+A production-quality Tetris game implemented in **Go** with terminal and
+WebAssembly editions. It follows the modern **Tetris Guideline** as closely as
+practical, with SRS wall kicks, a 7-bag randomizer, T-spins, combos,
+back-to-back chains, perfect clears, leaderboards, and lifetime statistics.
 
 ```
 +------------------------+   +--------------------------+
@@ -99,27 +98,26 @@ cd web && python3 -m http.server 8080
 
 ### Browser controls
 
-| Action      | Keyboard            | Touch                 |
-| ----------- | ------------------- | --------------------- |
-| Move Left   | ←                   | ◀ button (hold)       |
-| Move Right  | →                   | ▶ button (hold)       |
-| Soft Drop   | ↓ (hold)            | ▼ button (hold)       |
-| Hard Drop   | Space               | ⤓ button              |
-| Rotate CW   | ↑                   | ⟳ button              |
-| Rotate CCW  | Z                   | ⟲ button              |
-| Rotate 180° | A                   | —                     |
-| Hold Piece  | C                   | HOLD button           |
-| Pause       | P                   | ⏸ button              |
-| Restart     | R                   | —                     |
+| Action      | Keyboard            | Touch gesture                    |
+| ----------- | ------------------- | -------------------------------- |
+| Move        | Left / Right        | Drag horizontally                |
+| Soft Drop   | Down (hold)         | Drag down                        |
+| Hard Drop   | Space               | Flick down                       |
+| Rotate CW   | Up                  | Tap the right half               |
+| Rotate CCW  | Z                   | Tap the left half                |
+| Rotate 180  | A                   | Double-tap either half           |
+| Hold Piece  | C                   | Swipe up                         |
+| Pause       | P                   | Tap the corner pause control     |
+| Restart     | R                   | Use Restart in the pause screen  |
 
-On-screen touch buttons appear automatically on phones/tablets. Themes
-(Classic / Neon / Retro / Mono) are selectable in the page header, and the top
-10 scores persist in the browser.
+The playfield itself is the touch controller; there is no gameplay button
+panel. The layout keeps the field, hold/next previews, HUD, and pause control in
+one viewport in portrait and landscape orientations.
 
-The browser build mirrors the CLI's menus: from the start screen choose
-**Play**, **High Scores**, **Statistics** (lifetime, in `localStorage`),
-**Settings** (starting level, ghost/hold/180° toggles — persisted), or
-**Credits**. Settings are passed into the engine when a game starts.
+The browser includes Marathon, 40-line Sprint, two-minute Ultra, and Zen modes;
+per-mode leaderboards and personal bests; full-interface themes; sound and
+haptic feedback; gesture sensitivity; reduced motion; high contrast; and
+expanded lifetime statistics. Browser data is persisted in `localStorage`.
 
 > **Trademark:** Tetris® is a registered trademark of Tetris Holding, LLC.
 > This project is a fan-made clone and is not affiliated with or endorsed by
@@ -238,10 +236,10 @@ Deferred extension points (the engine and screen model make these additive):
 
 - Replay recording & playback
 - AI autoplay
-- Daily Challenge, Sprint (40L), Marathon, Ultra, Zen modes
+- Daily Challenge and custom challenge modes
 - Custom board sizes / gravity curves
 - Achievements, CSV leaderboard export, profile import/export
-- Save & resume, ASCII particle effects, additional themes
+- Save & resume, ASCII particle effects, and additional themes
 
 ## License
 

@@ -6,10 +6,10 @@ import "math/rand"
 type GameState int
 
 const (
-	StateReady   GameState = iota // not yet started
-	StatePlaying                  // active play
-	StatePaused                   // paused
-	StateGameOver                 // finished
+	StateReady    GameState = iota // not yet started
+	StatePlaying                   // active play
+	StatePaused                    // paused
+	StateGameOver                  // finished
 )
 
 // Timing constants (milliseconds).
@@ -25,6 +25,7 @@ type GameSettings struct {
 	GhostEnabled  bool
 	HoldEnabled   bool
 	Rotate180     bool
+	ZenMode       bool
 	StartingLevel int
 }
 
@@ -36,6 +37,7 @@ type GameStats struct {
 	MiniTSpins    int
 	PerfectClears int
 	LongestCombo  int
+	ZenResets     int
 }
 
 // Game is the core, I/O-free Tetris engine. It is driven by Tick (time advance)
@@ -47,13 +49,13 @@ type Game struct {
 	scorer ScoringStrategy
 	cfg    GameSettings
 
-	state   GameState
-	active  ActivePiece
+	state     GameState
+	active    ActivePiece
 	hasActive bool
-	hold    PieceType
-	hasHold bool
-	holdUsed bool
-	queue   []PieceType
+	hold      PieceType
+	hasHold   bool
+	holdUsed  bool
+	queue     []PieceType
 
 	score int
 	level int
@@ -61,22 +63,31 @@ type Game struct {
 	combo int // -1 when no chain active
 	b2b   bool
 
-	lockTimer  int64
-	lockResets int
-	grounded   bool
-	lowestY    int
+	lockTimer    int64
+	lockResets   int
+	grounded     bool
+	lowestY      int
 	gravityTimer int64
-	elapsed     int64
-	softDrop    bool
+	elapsed      int64
+	softDrop     bool
 
 	lastWasRotation bool
 
+	gestureRotation   bool
+	gestureOrigin     ActivePiece
+	gestureResult     ActivePiece
+	gestureDirection  RotationDir
+	gestureLockTimer  int64
+	gestureLockResets int
+	gestureGrounded   bool
+
 	// line-clear animation
-	clearing    bool
-	clearRows   []int
-	clearCount  int
-	pendingB2B  bool
-	clearTimer  int64
+	clearing     bool
+	clearRows    []int
+	clearCount   int
+	pendingB2B   bool
+	pendingLevel int
+	clearTimer   int64
 
 	stats GameStats
 }
@@ -119,6 +130,7 @@ func (g *Game) spawnNext() {
 // spawnSpecific places a concrete piece type, resetting per-piece timers but NOT
 // hold usage (used by the hold swap).
 func (g *Game) spawnSpecific(t PieceType) {
+	g.invalidateGestureRotation()
 	g.active = ActivePiece{}.Spawn(t)
 	g.hasActive = true
 	g.lockTimer = LockDelayMs
@@ -128,26 +140,31 @@ func (g *Game) spawnSpecific(t PieceType) {
 	g.gravityTimer = 0
 	g.lastWasRotation = false
 	if !g.board.CanPlace(g.active.Cells()) {
-		g.state = StateGameOver
+		if g.cfg.ZenMode {
+			g.board = NewBoard()
+			g.stats.ZenResets++
+		} else {
+			g.state = StateGameOver
+		}
 	}
 }
 
 // --- Accessors -------------------------------------------------------------
 
-func (g *Game) State() GameState        { return g.state }
-func (g *Game) Board() *Board           { return g.board }
-func (g *Game) Active() ActivePiece     { return g.active }
-func (g *Game) HasActive() bool         { return g.hasActive }
+func (g *Game) State() GameState             { return g.state }
+func (g *Game) Board() *Board                { return g.board }
+func (g *Game) Active() ActivePiece          { return g.active }
+func (g *Game) HasActive() bool              { return g.hasActive }
 func (g *Game) HeldPiece() (PieceType, bool) { return g.hold, g.hasHold }
-func (g *Game) Score() int              { return g.score }
-func (g *Game) Level() int              { return g.level }
-func (g *Game) Lines() int              { return g.lines }
-func (g *Game) Combo() int              { return g.combo }
-func (g *Game) BackToBack() bool        { return g.b2b }
-func (g *Game) Stats() GameStats        { return g.stats }
-func (g *Game) ElapsedMs() int64        { return g.elapsed }
-func (g *Game) IsClearing() bool        { return g.clearing }
-func (g *Game) ClearRows() []int        { return g.clearRows }
+func (g *Game) Score() int                   { return g.score }
+func (g *Game) Level() int                   { return g.level }
+func (g *Game) Lines() int                   { return g.lines }
+func (g *Game) Combo() int                   { return g.combo }
+func (g *Game) BackToBack() bool             { return g.b2b }
+func (g *Game) Stats() GameStats             { return g.stats }
+func (g *Game) ElapsedMs() int64             { return g.elapsed }
+func (g *Game) IsClearing() bool             { return g.clearing }
+func (g *Game) ClearRows() []int             { return g.clearRows }
 
 // NextQueue returns up to n upcoming piece types (not yet spawned).
 func (g *Game) NextQueue(n int) []PieceType {
@@ -185,6 +202,7 @@ func (g *Game) tryShift(dx int) {
 	if !g.canAct() {
 		return
 	}
+	g.invalidateGestureRotation()
 	if g.board.CanPlace(g.active.Tetromino().Cells(g.active.State, g.active.X+dx, g.active.Y)) {
 		g.active.X += dx
 		g.lastWasRotation = false
@@ -195,18 +213,73 @@ func (g *Game) tryShift(dx int) {
 // RotateCW / RotateCCW / Rotate180 attempt rotation with SRS kicks.
 func (g *Game) RotateCW() {
 	if g.canAct() {
+		g.invalidateGestureRotation()
 		g.applyRotation(TryRotate(g.board, g.active.Tetromino(), g.active.State, g.active.X, g.active.Y, RotateCW))
 	}
 }
 func (g *Game) RotateCCW() {
 	if g.canAct() {
+		g.invalidateGestureRotation()
 		g.applyRotation(TryRotate(g.board, g.active.Tetromino(), g.active.State, g.active.X, g.active.Y, RotateCCW))
 	}
 }
 func (g *Game) Rotate180() {
 	if g.canAct() && g.cfg.Rotate180 {
+		g.invalidateGestureRotation()
 		g.applyRotation(TryRotate(g.board, g.active.Tetromino(), g.active.State, g.active.X, g.active.Y, Rotate180))
 	}
+}
+
+// RotateGesture applies an immediate quarter turn while retaining enough state
+// for a following tap to replace it with a direct 180-degree kick.
+func (g *Game) RotateGesture(dir RotationDir) {
+	if !g.canAct() || (dir != RotateCW && dir != RotateCCW) {
+		return
+	}
+	g.invalidateGestureRotation()
+	origin := g.active
+	lockTimer, lockResets, grounded := g.lockTimer, g.lockResets, g.grounded
+	g.applyRotation(TryRotate(g.board, g.active.Tetromino(), g.active.State, g.active.X, g.active.Y, dir))
+	g.gestureRotation = true
+	g.gestureOrigin = origin
+	g.gestureResult = g.active
+	g.gestureDirection = dir
+	g.gestureLockTimer = lockTimer
+	g.gestureLockResets = lockResets
+	g.gestureGrounded = grounded
+}
+
+// CompleteGesture180 turns a rapid pair of same-side taps into one direct 180
+// from the placement before the first tap. If another manipulation intervened,
+// it falls back to the second quarter turn so the gesture remains predictable.
+func (g *Game) CompleteGesture180(dir RotationDir) {
+	if !g.canAct() || !g.cfg.Rotate180 || (dir != RotateCW && dir != RotateCCW) {
+		return
+	}
+	if g.gestureRotation && g.gestureDirection == dir && g.active == g.gestureResult {
+		current := g.active
+		currentLockTimer, currentLockResets, currentGrounded := g.lockTimer, g.lockResets, g.grounded
+		g.active = g.gestureOrigin
+		g.lockTimer = g.gestureLockTimer
+		g.lockResets = g.gestureLockResets
+		g.grounded = g.gestureGrounded
+		g.invalidateGestureRotation()
+		result := TryRotate(g.board, g.active.Tetromino(), g.active.State, g.active.X, g.active.Y, Rotate180)
+		if result.Changed {
+			g.applyRotation(result)
+			return
+		}
+		g.active = current
+		g.lockTimer = currentLockTimer
+		g.lockResets = currentLockResets
+		g.grounded = currentGrounded
+	}
+	g.invalidateGestureRotation()
+	g.applyRotation(TryRotate(g.board, g.active.Tetromino(), g.active.State, g.active.X, g.active.Y, dir))
+}
+
+func (g *Game) invalidateGestureRotation() {
+	g.gestureRotation = false
 }
 
 func (g *Game) applyRotation(r RotateResult) {
@@ -238,6 +311,7 @@ func (g *Game) SoftDrop() {
 	if !g.canAct() {
 		return
 	}
+	g.invalidateGestureRotation()
 	if g.board.CanPlace(g.active.Tetromino().Cells(g.active.State, g.active.X, g.active.Y+1)) {
 		g.active.Y++
 		g.score += g.scorer.SoftDropPoints(1)
@@ -253,6 +327,7 @@ func (g *Game) HardDrop() {
 	if !g.canAct() {
 		return
 	}
+	g.invalidateGestureRotation()
 	dist := 0
 	for g.board.CanPlace(g.active.Tetromino().Cells(g.active.State, g.active.X, g.active.Y+1)) {
 		g.active.Y++
@@ -267,6 +342,7 @@ func (g *Game) Hold() {
 	if !g.canAct() || !g.cfg.HoldEnabled || g.holdUsed {
 		return
 	}
+	g.invalidateGestureRotation()
 	current := g.active.Type
 	if g.hasHold {
 		swapped := g.hold
@@ -328,6 +404,7 @@ func (g *Game) Tick(dtMs int64) {
 		for g.gravityTimer >= interval {
 			g.gravityTimer -= interval
 			if g.board.CanPlace(g.active.Tetromino().Cells(g.active.State, g.active.X, g.active.Y+1)) {
+				g.invalidateGestureRotation()
 				g.active.Y++
 				if g.softDrop {
 					g.score += g.scorer.SoftDropPoints(1)
@@ -367,13 +444,21 @@ func (g *Game) lockPiece() {
 	g.stats.PiecesPlaced++
 
 	rows, count := g.board.fullRows()
+	tspin := DetectTSpin(g.board, locked, g.lastWasRotation)
 	if count == 0 {
+		if tspin != NoTSpin {
+			g.score += g.scorer.LockBonus(ClearContext{
+				TSpin: tspin,
+				Level: g.level,
+				Combo: -1,
+			})
+			g.recordTSpin(tspin)
+		}
 		g.combo = -1
 		g.spawnNext()
 		return
 	}
 
-	tspin := DetectTSpin(g.board, locked, g.lastWasRotation)
 	difficult := count == 4 || tspin != NoTSpin
 
 	// combo
@@ -403,19 +488,16 @@ func (g *Game) lockPiece() {
 	g.score += g.scorer.LockBonus(ctx)
 
 	g.lines += count
-	g.level = LevelForLines(g.lines)
+	g.level = g.cfg.StartingLevel + g.lines/LinesPerLevel
 	g.clearRows = rows
 	g.clearCount = count
 	g.pendingB2B = backToBack
+	g.pendingLevel = ctx.Level
 	g.clearing = true
 	g.clearTimer = ClearAnimMs
 
 	// stats
-	if tspin == TSpinFull {
-		g.stats.TSpins++
-	} else if tspin == TSpinMini {
-		g.stats.MiniTSpins++
-	}
+	g.recordTSpin(tspin)
 	if count == 4 {
 		g.stats.Tetrises++
 	}
@@ -430,9 +512,17 @@ func (g *Game) finishClear() {
 	g.clearCount = 0
 	if g.board.IsPerfectClear() {
 		g.stats.PerfectClears++
-		g.score += perfectClearScore(count, g.pendingB2B, g.level)
+		g.score += perfectClearScore(count, g.pendingB2B, g.pendingLevel)
 	}
 	g.spawnNext()
+}
+
+func (g *Game) recordTSpin(tspin TSpinType) {
+	if tspin == TSpinFull {
+		g.stats.TSpins++
+	} else if tspin == TSpinMini {
+		g.stats.MiniTSpins++
+	}
 }
 
 // perfectClearScore mirrors the GuidelineScorer perfect-clear values.

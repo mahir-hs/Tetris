@@ -120,7 +120,7 @@ func TestLineClearAndLevelUp(t *testing.T) {
 		}
 		g.spawnSpecific(PieceI)
 		g.active.State = 1 // vertical
-		g.active.X = 2      // occupies column 4
+		g.active.X = 2     // occupies column 4
 		g.active.Y = 18
 		g.HardDrop()
 		g.Tick(ClearAnimMs + 1) // finish the line-clear animation and spawn next
@@ -130,6 +130,111 @@ func TestLineClearAndLevelUp(t *testing.T) {
 	}
 	if g.Level() != 2 {
 		t.Fatalf("expected level 2 after 10 lines, got %d", g.Level())
+	}
+}
+
+func TestStartingLevelAdvancesFromConfiguredLevel(t *testing.T) {
+	g := NewGame(rand.New(rand.NewSource(1)), GameSettings{StartingLevel: 10})
+	for i := 0; i < 10; i++ {
+		g.board = NewBoard()
+		for x := 0; x < BoardWidth; x++ {
+			if x != 4 {
+				g.board.Lock([][2]int{{BoardHeight - 1, x}}, 1)
+			}
+		}
+		g.spawnSpecific(PieceI)
+		g.active.State = 1
+		g.active.X = 2
+		g.active.Y = 18
+		g.HardDrop()
+		g.Tick(ClearAnimMs + 1)
+	}
+	if g.Level() != 11 {
+		t.Fatalf("expected starting level 10 to advance to 11, got %d", g.Level())
+	}
+}
+
+func TestZeroLineTSpinScoresAndCounts(t *testing.T) {
+	g := newTestGame(t)
+	g.board = NewBoard()
+	g.active = ActivePiece{Type: PieceT, State: 0, X: 3, Y: 10}
+	g.hasActive = true
+	g.lastWasRotation = true
+	fill(g.board, 10, 3, 1)
+	fill(g.board, 10, 5, 1)
+	fill(g.board, 12, 3, 1)
+
+	g.lockPiece()
+	if g.Score() != 400 {
+		t.Fatalf("expected 400 points for a zero-line T-spin, got %d", g.Score())
+	}
+	if g.Stats().TSpins != 1 {
+		t.Fatalf("expected one recorded T-spin, got %d", g.Stats().TSpins)
+	}
+}
+
+func TestDoubleTapGestureUsesDirect180Rotation(t *testing.T) {
+	g := newTestGame(t)
+	g.board = NewBoard()
+	g.spawnSpecific(PieceT)
+	original := g.Active()
+	g.RotateGesture(RotateCW)
+	if g.Active().State != 1 {
+		t.Fatalf("expected immediate quarter turn, got state %d", g.Active().State)
+	}
+	g.CompleteGesture180(RotateCW)
+	if g.Active().State != 2 {
+		t.Fatalf("expected double tap to end 180 degrees from state %d, got %d", original.State, g.Active().State)
+	}
+	if g.gestureRotation {
+		t.Fatal("completed double tap should clear gesture rotation state")
+	}
+}
+
+func TestGesture180FallsBackAfterMovement(t *testing.T) {
+	g := newTestGame(t)
+	g.board = NewBoard()
+	g.spawnSpecific(PieceT)
+	g.RotateGesture(RotateCW)
+	g.MoveRight()
+	g.CompleteGesture180(RotateCW)
+	if g.Active().State != 2 {
+		t.Fatalf("expected a second quarter turn after movement, got state %d", g.Active().State)
+	}
+}
+
+func TestDoubleTapUses180WhenFirstQuarterTurnIsBlocked(t *testing.T) {
+	g := newTestGame(t)
+	g.board = NewBoard()
+	g.active = ActivePiece{Type: PieceT, State: 0, X: 3, Y: 5}
+	g.hasActive = true
+	fill(g.board, 7, 4, 1)
+	fill(g.board, 7, 3, 1)
+	fill(g.board, 4, 3, 1)
+
+	g.RotateGesture(RotateCW)
+	if g.Active().State != 0 {
+		t.Fatalf("expected every quarter-turn kick to be blocked, got state %d", g.Active().State)
+	}
+	g.CompleteGesture180(RotateCW)
+	if g.Active().State != 2 || g.Active().X != 4 {
+		t.Fatalf("expected direct 180 kick to state 2 at x=4, got %+v", g.Active())
+	}
+}
+
+func TestZenModeRecoversFromTopOut(t *testing.T) {
+	g := NewGame(rand.New(rand.NewSource(1)), GameSettings{StartingLevel: 1, ZenMode: true})
+	for y := 0; y < BoardHeight; y++ {
+		for x := 0; x < BoardWidth; x++ {
+			g.board.cells[y][x] = 1
+		}
+	}
+	g.spawnNext()
+	if g.State() != StatePlaying {
+		t.Fatalf("zen game should continue after top out, got %v", g.State())
+	}
+	if g.Stats().ZenResets != 1 {
+		t.Fatalf("expected one zen reset, got %d", g.Stats().ZenResets)
 	}
 }
 

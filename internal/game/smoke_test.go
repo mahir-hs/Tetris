@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mahir/tetris/internal/config"
+	"github.com/mahir/tetris/internal/domain"
 	"github.com/mahir/tetris/internal/input"
 	"github.com/mahir/tetris/internal/renderer"
 )
@@ -19,6 +20,35 @@ func TestEngineViewRenders(t *testing.T) {
 		t.Fatal("empty engine view")
 	}
 	t.Logf("\n%s", out)
+}
+
+func TestRestartAfterGameOverRearmsTickLoop(t *testing.T) {
+	cfg := config.DefaultSettings()
+	e := NewEngine(1, cfg, renderer.GetTheme("classic"), input.NewBindings(cfg))
+	for i := 0; i < 100 && e.Game().State() != domain.StateGameOver; i++ {
+		e.Game().HardDrop()
+	}
+	if e.Game().State() != domain.StateGameOver {
+		t.Fatal("expected repeated hard drops to top out")
+	}
+	_, cmd := e.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	if cmd == nil {
+		t.Fatal("restart after game over must re-arm the tick loop")
+	}
+}
+
+func TestRestartInvalidatesPreviouslyScheduledTick(t *testing.T) {
+	cfg := config.DefaultSettings()
+	e := NewEngine(1, cfg, renderer.GetTheme("classic"), input.NewBindings(cfg))
+	oldGeneration := e.tickGeneration
+	_, cmd := e.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	if cmd == nil {
+		t.Fatal("restart must schedule a replacement tick")
+	}
+	_, staleCmd := e.Update(TickMsg{generation: oldGeneration})
+	if staleCmd != nil {
+		t.Fatal("a stale tick must not start a second tick chain")
+	}
 }
 
 func TestEngineHardDropScores(t *testing.T) {

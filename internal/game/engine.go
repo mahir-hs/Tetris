@@ -4,8 +4,8 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/mahir/tetris/internal/config"
 	"github.com/mahir/tetris/internal/domain"
 	"github.com/mahir/tetris/internal/input"
@@ -13,7 +13,9 @@ import (
 )
 
 // TickMsg is sent on a fixed cadence to advance the simulation.
-type TickMsg struct{}
+type TickMsg struct {
+	generation uint64
+}
 
 // QuitToMenuMsg tells the root model to leave the game screen.
 type QuitToMenuMsg struct{}
@@ -38,14 +40,15 @@ type GameOverMsg GameResult
 
 // Engine is the Bubble Tea model for an active game session.
 type Engine struct {
-	game            *domain.Game
-	theme           renderer.Theme
-	bindings        *input.Bindings
-	gs              domain.GameSettings
-	fps             int
-	playerID        uint
-	lastTick        time.Time
-	notifiedOver    bool
+	game           *domain.Game
+	theme          renderer.Theme
+	bindings       *input.Bindings
+	gs             domain.GameSettings
+	fps            int
+	playerID       uint
+	lastTick       time.Time
+	notifiedOver   bool
+	tickGeneration uint64
 }
 
 // NewEngine constructs a game engine for the given player and settings.
@@ -58,13 +61,14 @@ func NewEngine(playerID uint, cfg config.Settings, theme renderer.Theme, binding
 	}
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	return &Engine{
-		game:     domain.NewGame(rng, gs),
-		theme:    theme,
-		bindings: bindings,
-		gs:       gs,
-		fps:      cfg.FPSLimit,
-		playerID: playerID,
-		lastTick: time.Now(),
+		game:           domain.NewGame(rng, gs),
+		theme:          theme,
+		bindings:       bindings,
+		gs:             gs,
+		fps:            cfg.FPSLimit,
+		playerID:       playerID,
+		lastTick:       time.Now(),
+		tickGeneration: 1,
 	}
 }
 
@@ -80,21 +84,24 @@ func (e *Engine) tickInterval() time.Duration {
 	return time.Duration(ms) * time.Millisecond
 }
 
-func tickCmd(d time.Duration) tea.Cmd {
-	return tea.Tick(d, func(t time.Time) tea.Msg { return TickMsg{} })
+func tickCmd(d time.Duration, generation uint64) tea.Cmd {
+	return tea.Tick(d, func(t time.Time) tea.Msg { return TickMsg{generation: generation} })
 }
 
 // Init starts the tick loop.
-func (e *Engine) Init() tea.Cmd { return tickCmd(e.tickInterval()) }
+func (e *Engine) Init() tea.Cmd { return tickCmd(e.tickInterval(), e.tickGeneration) }
 
 // Update handles time and input for the game.
 func (e *Engine) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case TickMsg:
+		if msg.generation != 0 && msg.generation != e.tickGeneration {
+			return e, nil
+		}
+		now := time.Now()
+		dt := now.Sub(e.lastTick)
+		e.lastTick = now
 		if e.game.State() == domain.StatePlaying {
-			now := time.Now()
-			dt := now.Sub(e.lastTick)
-			e.lastTick = now
 			if dt > 100*time.Millisecond {
 				dt = 100 * time.Millisecond // clamp after stalls
 			}
@@ -108,7 +115,7 @@ func (e *Engine) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return e, nil
 		}
 		// Playing or paused: keep the tick loop alive.
-		return e, tickCmd(e.tickInterval())
+		return e, tickCmd(e.tickInterval(), e.tickGeneration)
 
 	case tea.KeyMsg:
 		if cmd := e.handleKey(msg); cmd != nil {
@@ -133,9 +140,11 @@ func (e *Engine) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return func() tea.Msg { return QuitToMenuMsg{} }
 	case config.ActionRestart:
 		e.resetGame()
-		return nil
+		e.tickGeneration++
+		return tickCmd(e.tickInterval(), e.tickGeneration)
 	case config.ActionPause:
 		e.game.TogglePause()
+		e.lastTick = time.Now()
 		return nil
 	}
 
@@ -182,7 +191,7 @@ func (e *Engine) gameOverCmd() tea.Cmd {
 		PiecesPlaced:  s.PiecesPlaced,
 		Tetrises:      s.Tetrises,
 		TSpins:        s.TSpins,
-		MiniTSpins:     s.MiniTSpins,
+		MiniTSpins:    s.MiniTSpins,
 		PerfectClears: s.PerfectClears,
 		LongestCombo:  s.LongestCombo,
 	}

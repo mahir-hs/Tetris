@@ -76,6 +76,9 @@ func newGame(this js.Value, args []js.Value) interface{} {
 		if v := opts.Get("rotate180"); v.Type() == js.TypeBoolean {
 			cfg.Rotate180 = v.Bool()
 		}
+		if v := opts.Get("zen"); v.Type() == js.TypeBoolean {
+			cfg.ZenMode = v.Bool()
+		}
 		if v := opts.Get("startingLevel"); v.Type() == js.TypeNumber {
 			lvl := v.Int()
 			if lvl < 1 {
@@ -119,12 +122,22 @@ func act(this js.Value, args []js.Value) interface{} {
 		game.MoveLeft()
 	case "moveRight":
 		game.MoveRight()
+	case "softDrop":
+		game.SoftDrop()
 	case "rotateCW":
 		game.RotateCW()
 	case "rotateCCW":
 		game.RotateCCW()
 	case "rotate180":
 		game.Rotate180()
+	case "gestureRotateCW":
+		game.RotateGesture(domain.RotateCW)
+	case "gestureRotateCCW":
+		game.RotateGesture(domain.RotateCCW)
+	case "gesture180CW":
+		game.CompleteGesture180(domain.RotateCW)
+	case "gesture180CCW":
+		game.CompleteGesture180(domain.RotateCCW)
 	case "hardDrop":
 		game.HardDrop()
 	case "hold":
@@ -222,6 +235,7 @@ func snapshot(this js.Value, args []js.Value) interface{} {
 		"miniTSpins":    st.MiniTSpins,
 		"perfectClears": st.PerfectClears,
 		"longestCombo":  st.LongestCombo,
+		"zenResets":     st.ZenResets,
 	}
 
 	return snap
